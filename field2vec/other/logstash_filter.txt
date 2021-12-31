@@ -1,0 +1,25 @@
+
+
+  http {
+    url => "http://127.0.0.1:8000/add_vector/"
+    verb => "POST"
+    body => {
+      "index" => "blogs"
+      "field_name" => "content"
+      "field" => "%{content}"
+    }
+    body_format => "json"
+  }
+
+  json {
+    source => "body"
+    target => "content_vector"
+  }
+
+  mutate {
+    convert => {"content_vector" => "float"}
+  }
+
+  mutate {
+    remove_field => ["body"]
+  }

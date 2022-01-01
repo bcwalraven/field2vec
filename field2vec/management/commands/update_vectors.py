@@ -1,12 +1,13 @@
 import os
 
 from elasticsearch import Elasticsearch
+from elasticsearch import exceptions
 from elasticsearch.helpers import scan, bulk
 
 from gensim.models import Doc2Vec
 from gensim.utils import simple_preprocess
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 
 
 def gen_data(documents, model, index, field):
@@ -15,8 +16,9 @@ def gen_data(documents, model, index, field):
         text = doc["_source"]["content"]
         tokens = simple_preprocess(text)
         vector = model.infer_vector(tokens, epochs=5)
+        doc = {"doc2vec": {f"{field}_vector": list(vector)}}
 
-        yield dict(_op_type="update", _index=index, _id=_id, doc={f"{field}_vector": list(vector)})
+        yield dict(_op_type="update", _index=index, _id=_id, doc=doc)
 
 
 class Command(BaseCommand):
@@ -33,11 +35,19 @@ class Command(BaseCommand):
 
         models_dir = os.path.join(__file__, os.path.pardir, os.path.pardir, os.path.pardir, "doc2vec", index, field)
         models_dir = os.path.abspath(models_dir)
-        model_path = os.path.join(models_dir, f"{index}-{field}-field2vec.model")
+        model_path = os.path.join(models_dir, f"blogs-content-field2vec.model")
 
-        model = Doc2Vec.load(model_path)
+        try:
+            model = Doc2Vec.load(model_path)
+        except FileNotFoundError as e:
+            self.stdout.write(self.style.ERROR(f"Model does not exist. {e}"))
+            return None
 
-        response = bulk(es, gen_data(documents, model, index, field))
-        print(response)
+        try:
+            updates, errors = bulk(es, gen_data(documents, model, index, field))
+        except exceptions.NotFoundError as e:
+            self.stdout.write(self.style.ERROR(f"Index does not exist. {e}"))
+            return None
 
-        self.stdout.write(self.style.SUCCESS(f"Successfully updated vectors for {index} - {field}"))
+        self.stdout.write(self.style.SUCCESS(f"Successfully updated {updates} vectors for {index} - {field}. "
+                                             f"errors: {errors}"))

@@ -1,13 +1,14 @@
 import os
 
 from elasticsearch import Elasticsearch
+from elasticsearch import exceptions
 from elasticsearch.helpers import scan
 
 from gensim.models.doc2vec import TaggedDocument
 from gensim.models import Doc2Vec
 from gensim.utils import simple_preprocess
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 
 
 class DocumentIterator:
@@ -34,11 +35,18 @@ class Command(BaseCommand):
         query = {"query": {"exists": {"field": field}}}
         documents = scan(es, query=query, index=index)
 
-        model = Doc2Vec(
-            DocumentIterator(documents, field),
-            vector_size=10,
-            window=5,
-            workers=1)
+        try:
+            model = Doc2Vec(
+                DocumentIterator(documents, field),
+                vector_size=10,
+                window=5,
+                workers=1)
+        except RuntimeError as e:
+            self.stdout.write(self.style.ERROR(f"Doc2vec Runtime Error: {e}. Field may not exist in index."))
+            return None
+        except exceptions.NotFoundError as e:
+            self.stdout.write(self.style.ERROR(f"Index does not exist. {e}"))
+            return None
 
         models_dir = os.path.join(__file__, os.path.pardir, os.path.pardir, os.path.pardir, "doc2vec", index, field)
         models_dir = os.path.abspath(models_dir)

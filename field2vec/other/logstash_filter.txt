@@ -1,25 +1,20 @@
-
-
-  http {
+http {
     url => "http://127.0.0.1:8000/add_vector/"
     verb => "POST"
     body => {
-      "index" => "blogs"
-      "field_name" => "content"
+      "index" => "target_index"
+      "field_name" => "target_field"
       "field" => "%{content}"
     }
+    target_body => "[doc2vec]"
     body_format => "json"
   }
 
   json {
-    source => "body"
-    target => "content_vector"
+    source => "[doc2vec][target_field_vector]"
+    target => "[doc2vec][target_field_vector]"
   }
 
   mutate {
-    convert => {"content_vector" => "float"}
-  }
-
-  mutate {
-    remove_field => ["body"]
+    convert => {"[doc2vec][target_field_vector]" => "float"}
   }
